@@ -51,10 +51,10 @@ docker build -t breezyvoice-web .
 3. 運行容器：
 
 ```bash
-docker run -d -p 8080:80 --name breezyvoice-web-container breezyvoice-web
+docker run -d -p 28400:28400 --name breezyvoice-web-container breezyvoice-web
 ```
 
-4. 打開瀏覽器訪問 http://localhost:8080
+4. 打開瀏覽器訪問 http://localhost:28400
 
 ### 選項 2: 直接使用文件服務器
 
@@ -64,14 +64,14 @@ docker run -d -p 8080:80 --name breezyvoice-web-container breezyvoice-web
 
 ```bash
 cd web
-python -m http.server 8080
+python -m http.server 28400
 ```
 
 #### 使用 Node.js http-server：
 
 ```bash
 cd web
-npx http-server -p 8080
+npx http-server -p 28400
 ```
 
 ## 步驟 6: 推送更改到您的 Fork
