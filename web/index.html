@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BreezyVoice</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%234f8cff'/%3E%3Cpath d='M18 34h4l4 8 4-20 4 12h4l4 8' stroke='%23fff' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0b0f15;
+      --panel: #111723;
+      --muted: #9aa4b2;
+      --text: #e6edf3;
+      --brand: #4f8cff;
+      --brand-600: #3f6fcc;
+      --border: #1f2937;
+      --shadow: 0 10px 20px rgba(0,0,0,0.35);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --muted: #64748b;
+        --text: #0f172a;
+        --brand: #2563eb;
+        --brand-600: #1d4ed8;
+        --border: #e2e8f0;
+        --shadow: 0 10px 20px rgba(2,6,23,0.08);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: linear-gradient(180deg, var(--bg), #0a0e13 40%);
+      color: var(--text);
+    }
+    .container { max-width: 980px; padding: 32px 20px 56px; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, var(--brand), #8b5cf6); box-shadow: var(--shadow); }
+    .title { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
+    .subtitle { color: var(--muted); font-size: 12px; }
+    .panel { background: radial-gradient(1200px 500px at 20% -50%, rgba(79,140,255,0.15), transparent), radial-gradient(1000px 500px at 120% -60%, rgba(139,92,246,0.18), transparent), var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .field { margin-bottom: 14px; }
+    label { display: block; font-weight: 600; margin-bottom: 8px; }
+    input[type=text], textarea, select { width: 100%; color: var(--text); background: #0d1420; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; outline: none; transition: border .15s ease; }
+    textarea { min-height: 120px; resize: vertical; }
+    input[type=text]:focus, textarea:focus, select:focus { border-color: var(--brand); }
+    .dropzone { border: 1px dashed var(--border); border-radius: 12px; padding: 14px; background: #0d1420; }
+    .actions { display: flex; gap: 12px; align-items: center; }
+    button.primary { background: var(--brand); color: white; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); transition: background .15s ease, transform .06s ease; }
+    button.primary:hover { background: var(--brand-600); }
+    button.primary:active { transform: translateY(1px); }
+    .hint { color: var(--muted); font-size: 12px; }
+    .audio-card { background: #0d1420; border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .badge { font-size: 12px; color: #bae6fd; background: #0b3a55; padding: 4px 8px; border-radius: 999px; border: 1px solid #155e75; }
+    .toast { position: fixed; right: 16px; bottom: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 12px; display: none; }
+    .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.2); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+  <script>
+    const apiPrefix = 'http://localhost:8089/api';
+
+    // Helper to query elements; auto-create spinner if missing
+    const qs = (sel) => {
+      let el = document.querySelector(sel);
+      if (!el && sel === '#spinner') {
+        const btn = document.querySelector('#go');
+        if (btn) {
+          const s = document.createElement('span');
+          s.id = 'spinner';
+          s.className = 'spinner';
+          btn.prepend(s);
+          el = s;
+        }
+      }
+      return el;
+    };
+
+    const toast = (msg) => {
+      const t = qs('#toast');
+      if (!t) return;
+      t.textContent = msg;
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 2600);
+    };
+
+    async function loadVoices() {
+      try {
+        const res = await fetch(`${apiPrefix}/voices`, { credentials: 'include' });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const voices = data.data || [];
+        const sel = qs('#voice');
+        if (sel) {
+          sel.innerHTML = '';
+          for (const v of voices) {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = v; sel.appendChild(opt);
+          }
+        }
+      } catch (e) {
+        console.error('Load voices failed:', e);
+        toast('Load voices failed');
+        const sel = qs('#voice');
+        if (sel && sel.children.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = 'default';
+          opt.textContent = 'Default voice';
+          sel.appendChild(opt);
+        }
+      }
+    }
+
+    let isSynthesizing = false;
+    async function synthesize() {
+      if (isSynthesizing) { toast('Please wait, a task is running'); return; }
+
+      const inputEl = qs('#input');
+      const input = inputEl ? inputEl.value.trim() : '';
+      if (!input) { toast('Please enter input text'); return; }
+      const fileInput = qs('#prompt_audio');
+      const file = fileInput && fileInput.files ? fileInput.files[0] : undefined;
+      const voiceSel = qs('#voice');
+      const voice = voiceSel ? voiceSel.value : '';
+      const btn = qs('#go');
+      const sp = qs('#spinner');
+
+      isSynthesizing = true;
+      if (btn) btn.disabled = true; if (sp) sp.style.display = 'inline-block'; if (btn) btn.textContent = 'Working...';
+
+      const resetButtonState = () => {
+        isSynthesizing = false;
+        if (btn) btn.disabled = false; if (sp) sp.style.display = 'none'; if (btn) btn.textContent = 'Synthesize';
+      };
+
+      try {
+        let resp;
+        if (file) {
+          const fd = new FormData();
+          fd.append('input', input);
+          fd.append('prompt_audio', file);
+          const trEl = qs('#prompt_text_transcription');
+          const tr = trEl ? trEl.value.trim() : '';
+          if (tr) fd.append('prompt_text_transcription', tr);
+          
+          // 在 console 中顯示送出的 POST 請求
+          console.log('Sending POST request to /api/audio/speech-from-prompt with FormData:');
+          console.log('input:', input);
+          console.log('prompt_audio:', file ? 'File selected' : 'No file');
+          console.log('prompt_text_transcription:', tr);
+          
+          resp = await fetch(`${apiPrefix}/audio/speech-from-prompt`, { method: 'POST', body: fd, credentials: 'include' });
+        } else {
+          const requestData = { model: 'tts-1', input, voice };
+          
+          // 在 console 中顯示送出的 POST 請求
+          console.log('Sending POST request to /api/audio/speech with JSON data:');
+          console.log('Request data:', requestData);
+          
+          resp = await fetch(`${apiPrefix}/audio/speech`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData), credentials: 'include'
+          });
+        }
+        if (!resp.ok) { const t = await resp.text(); throw new Error(t || ('HTTP ' + resp.status)); }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = qs('#audio'); if (audio) { audio.src = url; audio.play(); }
+        const dl = qs('#download'); if (dl) { dl.href = url; dl.download = 'output.wav'; dl.style.display = 'inline-block'; }
+        toast('Done');
+      } catch (e) {
+        console.error(e);
+        if (e instanceof TypeError && e.message.includes('fetch')) { toast('Network error, please check your connection'); }
+        else { toast('Synthesis failed, please retry'); }
+      } finally {
+        setTimeout(resetButtonState, 0);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', loadVoices);
+  </script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <div class="title">BreezyVoice</div>
+          <div class="subtitle">簡單的語音合成界面</div>
+        </div>
+      </div>
+      <span class="badge">Beta</span>
+    </header>
+
+    <div class="panel">
+      <div class="grid">
+        <section>
+          <div class="field">
+            <label for="input">輸入文字</label>
+            <textarea id="input" rows="6" placeholder="輸入要合成的文字..."></textarea>
+            <div class="hint">為了避免編碼問題，目前使用英文介面。</div>
+          </div>
+          <div class="field">
+            <label for="voice">預設語音（如果沒有提示）</label>
+            <select id="voice"></select>
+          </div>
+          <div class="actions">
+            <button id="go" class="primary" onclick="synthesize()">
+              <span id="spinner" class="spinner"></span>
+              <span style="margin-left:6px">合成語音</span>
+            </button>
+            <a id="download" href="#" style="display:none">下載 WAV</a>
+          </div>
+        </section>
+
+        <section>
+          <div class="field">
+            <label for="prompt_audio">可選：上傳提示音頻</label>
+            <div class="dropzone">
+              <input id="prompt_audio" type="file" accept="audio/*" />
+              <div class="hint">最多約 5-10 秒以獲得更好的語音指導。</div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="prompt_text_transcription">可選：提示轉錄</label>
+            <input id="prompt_text_transcription" type="text" placeholder="留空讓伺服器轉錄" />
+          </div>
+          <div class="audio-card">
+            <label>預覽</label>
+            <audio id="audio" controls style="width: 100%;"></audio>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast"></div>
+</body>
+</html>
